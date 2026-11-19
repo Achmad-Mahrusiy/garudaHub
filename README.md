@@ -1,66 +1,101 @@
-# Garuda-Hub
+# Garuda-Hub (Laravel)
 
-Website lelang proyek IT: klien memasang proyek, developer menawar, klien memilih pemenang. Dibuat untuk **studi kasus pembelajaran keamanan** mahasiswa dengan praktik PHP standar. Semua data adalah data dummy.
+Website lelang proyek IT: klien memasang proyek, developer menawar, klien memilih pemenang.
+Branch ini adalah hasil refactor prototype PHP native ke **Laravel 12** dengan arsitektur **MVC** dan **Eloquent ORM**.
+Kode PHP native aslinya (`src/index.php`, `src/database.sql`, `prototype/`) masih ada di branch `main`.
 
-## PERINGATAN
+> Hanya untuk komputer lokal atau lingkungan belajar. Semua data adalah data dummy; jangan memasukkan data pribadi atau password asli.
 
-- **Hanya untuk komputer lokal atau lingkungan belajar.** Jangan dipasang di server publik atau internet.
-- Konfigurasi bawaan memakai database `root` dengan password kosong. Itu hanya aman di komputer lokal.
-- Tidak ada pembatasan percobaan login (rate limit).
-- Tidak ada header keamanan `X-Frame-Options` maupun `Content-Security-Policy`.
-- Jangan memasukkan data pribadi atau password asli.
+## Menjalankan di Laragon
 
-## Fitur
+Butuh PHP 8.2+, Composer, dan MySQL/MariaDB (bawaan Laragon).
 
-- Daftar dan login dengan peran klien, developer, admin
-- Klien memasang proyek (judul, deskripsi, kategori, budget, batas lelang)
-- Daftar, pencarian, dan detail proyek beserta penawaran
-- Developer mengajukan penawaran (harga, durasi, proposal)
-- Klien memilih pemenang
-- Dasbor per peran dan panel admin
+```bat
+composer install
+copy .env.example .env
+php artisan key:generate
+mysql -u root -e "CREATE DATABASE garuda_hub_laravel"
+php artisan migrate:fresh --seed
+php artisan serve
+```
 
-## Kebutuhan
+Buka http://localhost:8000
 
-- PHP 8.1 atau lebih baru dengan ekstensi `mysqli`
-- MySQL atau MariaDB
+| Peran | Email | Password |
+| --- | --- | --- |
+| Admin | admin@example.com | admin123 |
+| Klien | budi@example.com | klien123 |
+| Developer | dewi@example.com | dev123 |
 
-## Instalasi
+Jalankan tes: `php artisan test`
 
-1. Klon repositori ini lalu masuk ke foldernya.
-2. Impor skema dan data dummy:
-   ```
-   mysql -u root -p < src/database.sql
-   ```
-   Ini membuat database `garuda_hub` dan **menghapus** tabel `users`, `projects`, `bids` jika sudah ada.
-3. (Opsional) Atur koneksi database lewat variabel lingkungan:
+## Struktur MVC
 
-   | Variabel | Bawaan |
-   | --- | --- |
-   | `GH_DB_HOST` | `127.0.0.1` |
-   | `GH_DB_USER` | `root` |
-   | `GH_DB_PASS` | kosong |
-   | `GH_DB_NAME` | `garuda_hub` |
-   | `GH_DB_PORT` | `3306` |
+| Lapisan | Lokasi | Isi |
+| --- | --- | --- |
+| Model | `app/Models` | `User`, `Project`, `Bid` + relasi Eloquent |
+| View | `resources/views` | Blade: layout, auth, projects, bids, dashboard, admin |
+| Controller | `app/Http/Controllers` | `AuthController`, `ProjectController`, `BidController`, `DashboardController`, `AdminController` |
+| Validasi | `app/Http/Requests` | `RegisterRequest`, `ProjectRequest`, `BidRequest` |
+| Otorisasi | `app/Policies`, `app/Http/Middleware/EnsureRole.php` | siapa boleh edit/hapus/pilih pemenang; middleware `role:` |
+| Rute | `routes/web.php` | dikelompokkan per peran |
+| Skema | `database/migrations` | tabel `users`, `projects`, `bids` |
+| Data dummy | `database/seeders/DatabaseSeeder.php` | data dari `src/database.sql` (branch `main`) |
 
-   Contoh: `export GH_DB_USER=nama_pengguna_anda`
-4. Jalankan server bawaan PHP:
-   ```
-   php -S localhost:8000 -t src
-   ```
-5. Buka `http://localhost:8000`.
+## Skema database
 
-## Akun dummy
+```mermaid
+erDiagram
+    users ||--o{ projects : "memasang (client_id)"
+    users ||--o{ bids : "mengajukan (developer_id)"
+    projects ||--o{ bids : "menerima (project_id)"
 
-Data awal berisi akun fiktif berdomain `example.com`: satu admin (`admin@example.com`), klien (`budi@`, `siti@`, `agus@`), dan developer (`dewi@`, `eko@`, `fitri@`, `gilang@`). Password tidak dicantumkan di sini. Anda dapat mendaftar akun baru sebagai klien atau developer lewat halaman Daftar.
+    users {
+        bigint id PK
+        varchar nama
+        varchar email UK
+        varchar password
+        enum role "klien | developer | admin"
+    }
+    projects {
+        bigint id PK
+        bigint client_id FK
+        varchar judul
+        text deskripsi
+        varchar kategori
+        bigint budget_min
+        bigint budget_max
+        date batas_lelang
+        enum status "terbuka | ditutup"
+    }
+    bids {
+        bigint id PK
+        bigint project_id FK
+        bigint developer_id FK
+        bigint harga
+        int durasi
+        text proposal
+        boolean is_winner
+    }
+```
 
-## Struktur
+Perbaikan dibanding prototype (`prototype/mocks/database.sql` di branch `main`):
 
-- `src/index.php`: seluruh aplikasi (routing lewat `?page=`)
-- `src/database.sql`: skema dan data dummy
+- `users.email` **UNIQUE**; `role` dan `status` jadi **ENUM**, bukan VARCHAR bebas.
+- **Foreign key** `projects.client_id → users`, `bids.project_id → projects`, `bids.developer_id → users`, semuanya `ON DELETE CASCADE` agar tidak ada data yatim.
+- **UNIQUE (`project_id`, `developer_id`)**: satu developer hanya satu penawaran per proyek.
+- **CHECK** `budget_max >= budget_min` dan `harga > 0 AND durasi > 0` (MySQL 8.0.16+ / MariaDB).
+- Index pada `status`, `kategori`, `role`, dan kolom FK.
 
-## Panduan pemakaian
+## CRUD (Eloquent)
 
-Lihat folder `docs/user/` bila tersedia.
+| Entitas | Create | Read | Update | Delete |
+| --- | --- | --- | --- | --- |
+| Project (klien) | `$user->projects()->create()` | `Project::with('client')->withCount('bids')->search()` | `$project->update()` | `$project->delete()` |
+| Bid (developer) | `$bid->project()->associate()->save()` | `$project->bids`, `$user->bids()` | `$bid->update()` | `$bid->delete()` |
+| User (admin) | `$user->save()` saat daftar | `User::withCount()` | `forceFill(['role'])` | `$user->delete()` |
+
+Memilih pemenang memakai `DB::transaction()` + `lockForUpdate()` supaya tidak ada dua pemenang.
 
 ## Lisensi
 
