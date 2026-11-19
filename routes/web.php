@@ -16,6 +16,14 @@ Route::middleware('guest')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+    // Klien: CRUD proyek miliknya
+    Route::middleware('role:klien')->group(function () {
+        Route::resource('projects', ProjectController::class)->only(['create', 'store', 'edit', 'update']);
+    });
+
+    // Klien pemilik atau admin (dicek di ProjectPolicy)
+    Route::delete('/projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy');
 });
 
 // Publik (didaftarkan terakhir & hanya angka agar tidak bentrok dengan /projects/create)

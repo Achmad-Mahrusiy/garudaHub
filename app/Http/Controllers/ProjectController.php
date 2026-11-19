@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ProjectRequest;
 use App\Models\Project;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
 class ProjectController extends Controller
@@ -24,13 +27,62 @@ class ProjectController extends Controller
     }
 
     /** READ (detail) */
-    public function show(Project $project): View
+    public function show(Request $request, Project $project): View
     {
         $project->load([
             'client',
             'bids' => fn ($q) => $q->with('developer')->orderByDesc('is_winner')->orderBy('harga')->orderBy('id'),
         ]);
 
-        return view('projects.show', compact('project'));
+        // Penawaran milik developer yang sedang login (dipakai di Tahap 9)
+        $user = $request->user();
+        $myBid = $user ? $project->bids->firstWhere('developer_id', $user->id) : null;
+
+        return view('projects.show', compact('project', 'myBid'));
+    }
+
+    public function create(): View
+    {
+        Gate::authorize('create', Project::class);
+
+        return view('projects.create', ['project' => new Project]);
+    }
+
+    /** CREATE */
+    public function store(ProjectRequest $request): RedirectResponse
+    {
+        Gate::authorize('create', Project::class);
+
+        // client_id diambil dari user yang login, bukan dari form (cegah IDOR)
+        $project = $request->user()->projects()->create($request->validated());
+
+        return redirect()->route('projects.show', $project)->with('ok', 'Proyek berhasil dipasang.');
+    }
+
+    public function edit(Project $project): View
+    {
+        Gate::authorize('update', $project);
+
+        return view('projects.edit', compact('project'));
+    }
+
+    /** UPDATE */
+    public function update(ProjectRequest $request, Project $project): RedirectResponse
+    {
+        Gate::authorize('update', $project);
+
+        $project->update($request->validated());
+
+        return redirect()->route('projects.show', $project)->with('ok', 'Proyek berhasil diperbarui.');
+    }
+
+    /** DELETE (penawaran ikut terhapus lewat FK cascade) */
+    public function destroy(Project $project): RedirectResponse
+    {
+        Gate::authorize('delete', $project);
+
+        $project->delete();
+
+        return redirect()->route('home')->with('ok', 'Proyek dihapus.');
     }
 }
