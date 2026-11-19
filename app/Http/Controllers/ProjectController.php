@@ -77,12 +77,14 @@ class ProjectController extends Controller
     }
 
     /** DELETE (penawaran ikut terhapus lewat FK cascade) */
-    public function destroy(Project $project): RedirectResponse
+    public function destroy(Request $request, Project $project): RedirectResponse
     {
         Gate::authorize('delete', $project);
 
         $project->delete();
 
-        return redirect()->route('home')->with('ok', 'Proyek dihapus.');
+        $to = $request->user()->isAdmin() ? route('admin.index') : route('dashboard');
+
+        return redirect($to)->with('ok', 'Proyek dihapus.');
     }
 }

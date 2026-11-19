@@ -17,6 +17,11 @@
                 @if (auth()->user()->role === 'klien')
                     <a href="{{ route('projects.create') }}">Pasang Proyek</a>
                 @endif
+                @if (auth()->user()->isAdmin())
+                    <a href="{{ route('admin.index') }}">Admin</a>
+                @else
+                    <a href="{{ route('dashboard') }}">Dasbor</a>
+                @endif
                 <span>{{ auth()->user()->nama }} ({{ auth()->user()->role }})</span>
                 <form class="inline" method="POST" action="{{ route('logout') }}">
                     @csrf
