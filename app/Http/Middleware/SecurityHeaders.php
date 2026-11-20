@@ -1,6 +1,6 @@
 <?php
 
-// NIM: 252410102092 - Achmad Mahrusiy Mahfudz (Episode 2: Garuda-Hub Security)
+// NIM: 252410102092 - Achmad Mahrusiy Mahfudz
 
 namespace App\Http\Middleware;
 
